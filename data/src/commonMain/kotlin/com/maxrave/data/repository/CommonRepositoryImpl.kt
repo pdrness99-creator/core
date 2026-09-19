@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import okio.IOException
 import okio.Path.Companion.toPath
 import okio.buffer
@@ -242,29 +243,20 @@ internal class CommonRepositoryImpl(
                 launch {
                     dataStoreManager.customOpenAIHeaders.collectLatest { headers ->
                         aiClient.customHeaders =
-                            if (headers.isNotEmpty()) {
-                                try {
-                                    // Parse JSON format: {"key1":"value1","key2":"value2"}
-                                    headers
-                                        .trim()
-                                        .removeSurrounding("{", "}")
-                                        .split(",")
-                                        .mapNotNull { pair ->
-                                            val parts = pair.split(":")
-                                            if (parts.size == 2) {
-                                                parts[0].trim().removeSurrounding("\"") to
-                                                    parts[1].trim().removeSurrounding("\"")
-                                            } else {
-                                                null
-                                            }
-                                        }.toMap()
-                                } catch (e: Exception) {
-                                    Logger.e("CommonRepository", "Failed to parse custom headers: ${e.message}")
-                                    null
+                            headers
+                                .trim()
+                                .takeIf { it.isNotEmpty() }
+                                ?.let { rawHeaders ->
+                                    try {
+                                        Json.decodeFromString<Map<String, String>>(rawHeaders)
+                                    } catch (e: Exception) {
+                                        Logger.e(
+                                            "CommonRepository",
+                                            "Failed to parse custom headers: ${e.message}",
+                                        )
+                                        null
+                                    }
                                 }
-                            } else {
-                                null
-                            }
                     }
                 }
 
