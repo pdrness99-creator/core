@@ -640,18 +640,24 @@ internal class LyricsCanvasRepositoryImpl(
         targetLanguage: String,
     ): Flow<Resource<Lyrics>> =
         flow {
-            runCatching {
-                Logger.w("AI Translation", "targetLanguage: $targetLanguage")
-                aiClient
-                    .translateLyrics(lyrics, targetLanguage)
-                    .onSuccess { translatedLyrics ->
-                        Logger.w("AI Translation", "translatedLyrics: $translatedLyrics")
-                        emit(Resource.Success(translatedLyrics))
-                    }.onFailure { throwable ->
-                        Logger.e("AI Translation", "Error: ${throwable.message}")
-                        emit(Resource.Error<Lyrics>("Translation failed"))
-                    }
-            }
+            Logger.w("AI Translation", "targetLanguage: $targetLanguage")
+            aiClient
+                .translateLyrics(lyrics, targetLanguage)
+                .onSuccess { translatedLyrics ->
+                    val lineCount = translatedLyrics.lines?.count { it.words.trim().isNotEmpty() } ?: 0
+                    Logger.d("AI Translation", "Translation succeeded: $lineCount lines")
+                    emit(Resource.Success(translatedLyrics))
+                }.onFailure { throwable ->
+                    val message =
+                        throwable.message
+                            ?.replace(Regex("\\s+"), " ")
+                            ?.trim()
+                            ?.take(300)
+                            ?.takeIf { it.isNotEmpty() }
+                            ?: "Unknown error"
+                    Logger.e("AI Translation", "Translation failed: $message")
+                    emit(Resource.Error<Lyrics>("Translation failed: $message"))
+                }
         }.flowOn(Dispatchers.IO)
 
     // SimpMusic Lyrics
