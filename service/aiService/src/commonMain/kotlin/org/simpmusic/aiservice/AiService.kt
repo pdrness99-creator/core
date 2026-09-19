@@ -108,6 +108,7 @@ class AiService(
                             "- If the detected language is the SAME as the target language code, return an EMPTY \"translations\" object. Do NOT translate. Do NOT paraphrase.\n" +
                             "- Otherwise, translate ONLY the values to the target language.\n" +
                             "- When translating: keep ALL keys exactly the same, output MUST have the EXACT same number of entries as the input, do NOT merge/split/add/remove any entries, and preserve the song's meaning, tone, and emotion.\n" +
+                            "- Return ONLY valid JSON. Do NOT wrap the response in markdown code fences or add explanatory text.\n" +
                             "\n" +
                             "OUTPUT:\n" +
                             "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language)."
