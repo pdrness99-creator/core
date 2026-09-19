@@ -129,14 +129,7 @@ class AiService(
                 .firstOrNull()
                 ?.message
                 ?.content ?: throw IllegalStateException("No response from AI")
-        val jsonData =
-            Regex(
-                "```json\\s*([\\s\\S]*?)```",
-            ).find(jsonContent)
-                ?.groups
-                ?.firstOrNull()
-                ?.value ?: jsonContent
-        val cleanedJson = jsonData.replace("```json", "").replace("```", "")
+        val cleanedJson = extractJsonPayload(jsonContent)
         val translationResponse = json.decodeFromString<TranslationResponse>(cleanedJson)
         val translatedMap = translationResponse.translations
         if (translatedMap.isEmpty()) {
@@ -144,6 +137,7 @@ class AiService(
                 "Input lyrics are already in the target language ($targetLanguage). Translation aborted.",
             )
         }
+        validateTranslationMap(indexToWords.keys, translatedMap)
 
         // Map translated text back to original lines, preserving all timestamps
         val translatedLines = lines.mapIndexed { index, originalLine ->
@@ -188,6 +182,7 @@ class AiService(
                 putJsonArray("required") {
                     add("translations")
                 }
+                put("additionalProperties", false)
             }
         private val aiResponseJsonSchema =
             JsonSchema(
@@ -195,6 +190,44 @@ class AiService(
                 schema = translationJsonSchema,
                 strict = false,
             )
+    }
+}
+
+private val jsonCodeBlockRegex =
+    Regex(
+        "(?is)```(?:json)?\\s*(.*?)\\s*```",
+    )
+
+internal fun extractJsonPayload(content: String): String {
+    val trimmed = content.trim()
+    return jsonCodeBlockRegex
+        .find(trimmed)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: trimmed
+}
+
+internal fun validateTranslationMap(
+    expectedKeys: Set<String>,
+    translatedMap: Map<String, String>,
+) {
+    val missingKeys = expectedKeys - translatedMap.keys
+    val unexpectedKeys = translatedMap.keys - expectedKeys
+    if (missingKeys.isNotEmpty() || unexpectedKeys.isNotEmpty()) {
+        val details = buildList {
+            if (missingKeys.isNotEmpty()) add("missing keys: ${missingKeys.sorted().joinToString(", ")}")
+            if (unexpectedKeys.isNotEmpty()) add("unexpected keys: ${unexpectedKeys.sorted().joinToString(", ")}")
+        }.joinToString("; ")
+        throw IllegalStateException("AI returned an invalid translation set: $details")
+    }
+
+    val blankKeys = translatedMap.filterValues { it.isBlank() }.keys
+    if (blankKeys.isNotEmpty()) {
+        throw IllegalStateException(
+            "AI returned blank translations for keys: ${blankKeys.sorted().joinToString(", ")}",
+        )
     }
 }
 
