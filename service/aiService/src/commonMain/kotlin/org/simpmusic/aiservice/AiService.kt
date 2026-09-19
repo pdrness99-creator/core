@@ -127,11 +127,17 @@ class AiService(
                 }
             }
         val completion: ChatCompletion = openAI.chatCompletion(request)
+        val choice = completion.choices.firstOrNull() ?: throw IllegalStateException("AI returned no choices")
+        when (choice.finishReason?.value) {
+            "length" -> throw IllegalStateException("AI response was truncated before the translation completed.")
+            "content_filter" -> throw IllegalStateException("AI response was blocked by the provider content filter.")
+            "tool_calls" -> throw IllegalStateException("AI returned an unexpected tool call instead of a translation.")
+        }
         val jsonContent =
-            completion.choices
-                .firstOrNull()
-                ?.message
-                ?.content ?: throw IllegalStateException("No response from AI")
+            choice.message.content
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: throw IllegalStateException("AI returned empty response content")
         val cleanedJson = extractJsonPayload(jsonContent)
         val translationResponse = json.decodeFromString<TranslationResponse>(cleanedJson)
         val translatedMap = translationResponse.translations
