@@ -94,6 +94,7 @@ class AiService(
             chatCompletionRequest {
                 this.model = this@AiService.model
                 responseFormat = when (aiHost) {
+                    // JSON mode is the portable format supported by OpenAI-compatible Chat Completions APIs.
                     AIHost.CUSTOM_OPENAI -> ChatResponseFormat.JsonObject
                     else -> ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
                 }
@@ -111,7 +112,9 @@ class AiService(
                             "- Return ONLY valid JSON. Do NOT wrap the response in markdown code fences or add explanatory text.\n" +
                             "\n" +
                             "OUTPUT:\n" +
-                            "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language)."
+                            "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language).\n" +
+                            "EXAMPLE OUTPUT:\n" +
+                            "{\"translations\":{\"0\":\"Translated line 0\",\"1\":\"Translated line 1\"}}"
                     }
                     user {
                         content {
