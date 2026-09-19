@@ -1,5 +1,6 @@
 package org.simpmusic.aiservice
 
+import com.maxrave.domain.data.model.metadata.Line
 import com.maxrave.domain.data.model.metadata.Lyrics
 
 class AiClient {
@@ -54,17 +55,37 @@ class AiClient {
                 aiService?.translateLyrics(inputLyrics, targetLanguage)
                     ?: throw IllegalStateException("AI service is not initialized. Please set host and apiKey.")
 
-            // Validate: check that at least some lines were actually translated
-            val originalWords = inputLyrics.lines?.map { it.words } ?: emptyList()
-            val translatedWords = result.lines?.map { it.words } ?: emptyList()
-            val unchangedCount = originalWords.zip(translatedWords).count { (orig, trans) -> orig == trans }
-            val translatableCount = originalWords.count { it.trim().isNotEmpty() && it.trim() != "♫" }
+            val originalLines =
+                inputLyrics.lines
+                    ?: throw IllegalStateException("Original lyrics lines are missing.")
+            val translatedLines =
+                result.lines
+                    ?: throw IllegalStateException("Translated lyrics lines are missing.")
 
-            // Reject if >80% of translatable lines are unchanged (likely same language or translation failed)
-            if (translatableCount > 0 && unchangedCount.toFloat() / translatableCount > 0.8f) {
-                throw IllegalStateException("Translation failed or returned empty lyrics or same language.")
+            if (originalLines.size != translatedLines.size) {
+                throw IllegalStateException(
+                    "Translation returned an unexpected number of lyric lines.",
+                )
+            }
+
+            if (!hasMeaningfulTranslation(originalLines, translatedLines)) {
+                throw IllegalStateException(
+                    "Translation failed or returned lyrics identical to the source.",
+                )
             }
 
             result
         }
 }
+
+internal fun hasMeaningfulTranslation(
+    originalLines: List<Line>,
+    translatedLines: List<Line>,
+): Boolean =
+    originalLines.indices.any { index ->
+        val original = originalLines[index].words.trim()
+        val translated = translatedLines[index].words.trim()
+        original.isNotEmpty() &&
+            original != "♫" &&
+            original != translated
+    }
