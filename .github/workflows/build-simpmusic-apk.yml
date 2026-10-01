@@ -1,0 +1,48 @@
+name: Build SimpMusic APK with DeepSeek fix
+
+on:
+  push:
+    branches:
+      - build/deepseek-v210
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SimpMusic 2.1.0
+        uses: actions/checkout@v4
+        with:
+          repository: maxrave-dev/SimpMusic
+          ref: f26622bdf48be734cbfb65c360124cfeed8907c5
+          path: app
+          fetch-depth: 1
+
+      - name: Replace core with patched core
+        run: |
+          rm -rf app/core
+          git clone --depth 1 --branch build/deepseek-v210 https://github.com/pdrness99-creator/core.git app/core
+
+      - name: Use FOSS build
+        working-directory: app
+        run: |
+          sed -i 's/^isFullBuild=true$/isFullBuild=false/' gradle.properties
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: microsoft
+          cache: gradle
+
+      - name: Build debug APK
+        working-directory: app
+        run: |
+          chmod +x gradlew
+          ./gradlew androidApp:assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpMusic-2.1.0-DeepSeek-Fix-debug
+          path: app/androidApp/build/outputs/apk/debug/*.apk
