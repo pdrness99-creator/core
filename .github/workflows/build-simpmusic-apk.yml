@@ -21,9 +21,10 @@ jobs:
       - name: Use the exact 2.1.0 core
         run: |
           rm -rf app/core
-          git clone --depth 1 https://github.com/maxrave-dev/core.git app/core
+          git clone --no-checkout https://github.com/maxrave-dev/core.git app/core
           cd app/core
-          git checkout 454213897e020e8b52097acde25fed3c43a12c73
+          git fetch --depth 1 origin 454213897e020e8b52097acde25fed3c43a12c73
+          git checkout --detach FETCH_HEAD
 
       - name: Use FOSS build
         working-directory: app
