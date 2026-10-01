@@ -27,6 +27,7 @@ jobs:
         working-directory: app
         run: |
           sed -i 's/^isFullBuild=true$/isFullBuild=false/' gradle.properties
+          sed -i 's/compottie = "2.2.2-compose-1.12-SNAPSHOT"/compottie = "2.2.2"/' gradle/libs.versions.toml
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
