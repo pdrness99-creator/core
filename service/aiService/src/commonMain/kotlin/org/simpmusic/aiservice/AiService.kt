@@ -93,7 +93,7 @@ class AiService(
         val request =
             chatCompletionRequest {
                 this.model = this@AiService.model
-                responseFormat = ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
+                responseFormat = if (aiHost == AIHost.CUSTOM_OPENAI) ChatResponseFormat.JsonObject else ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
                 messages {
                     system {
                         content =
