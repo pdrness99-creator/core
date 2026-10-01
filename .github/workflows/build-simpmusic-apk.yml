@@ -1,9 +1,9 @@
-name: Build SimpMusic APK with DeepSeek fix
+name: Build SimpMusic 2.1.0 control APK
 
 on:
   push:
     branches:
-      - build/deepseek-v210
+      - build/deepseek-v210-control
   workflow_dispatch:
 
 jobs:
@@ -18,10 +18,12 @@ jobs:
           path: app
           fetch-depth: 1
 
-      - name: Replace core with patched core
+      - name: Use the exact 2.1.0 core
         run: |
           rm -rf app/core
-          git clone --depth 1 --branch build/deepseek-v210 https://github.com/pdrness99-creator/core.git app/core
+          git clone --depth 1 https://github.com/maxrave-dev/core.git app/core
+          cd app/core
+          git checkout 454213897e020e8b52097acde25fed3c43a12c73
 
       - name: Use FOSS build
         working-directory: app
@@ -42,8 +44,8 @@ jobs:
           chmod +x gradlew
           ./gradlew androidApp:assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload control APK
         uses: actions/upload-artifact@v4
         with:
-          name: SimpMusic-2.1.0-DeepSeek-Fix-debug
+          name: SimpMusic-2.1.0-control-debug
           path: app/androidApp/build/outputs/apk/debug/*.apk
