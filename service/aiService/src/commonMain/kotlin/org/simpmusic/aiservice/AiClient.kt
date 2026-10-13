@@ -57,8 +57,12 @@ class AiClient {
             // Validate: check that at least some lines were actually translated
             val originalWords = inputLyrics.lines?.map { it.words } ?: emptyList()
             val translatedWords = result.lines?.map { it.words } ?: emptyList()
-            val unchangedCount = originalWords.zip(translatedWords).count { (orig, trans) -> orig == trans }
-            val translatableCount = originalWords.count { it.trim().isNotEmpty() && it.trim() != "♫" }
+            val translatablePairs =
+                originalWords.zip(translatedWords).filter { (original, _) ->
+                    original.trim().let { it.isNotEmpty() && it != "♫" }
+                }
+            val unchangedCount = translatablePairs.count { (original, translated) -> original.trim() == translated.trim() }
+            val translatableCount = translatablePairs.size
 
             // Reject if >80% of translatable lines are unchanged (likely same language or translation failed)
             if (translatableCount > 0 && unchangedCount.toFloat() / translatableCount > 0.8f) {

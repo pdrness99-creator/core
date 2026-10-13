@@ -4,6 +4,7 @@ import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatResponseFormat
 import com.aallam.openai.api.chat.JsonSchema
 import com.aallam.openai.api.chat.chatCompletionRequest
+import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
@@ -11,6 +12,8 @@ import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.OpenAIHost.Companion.Gemini
 import com.maxrave.domain.data.model.metadata.Line
 import com.maxrave.domain.data.model.metadata.Lyrics
+import io.ktor.http.URLBuilder
+import io.ktor.http.encodedPath
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -20,6 +23,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import kotlin.time.Duration.Companion.minutes
 
 class AiService(
     private val aiHost: AIHost = AIHost.GEMINI,
@@ -37,19 +41,28 @@ class AiService(
     private val openAI: OpenAI by lazy {
         when (aiHost) {
             AIHost.GEMINI -> {
-                OpenAI(host = Gemini, token = apiKey)
+                OpenAI(host = Gemini, token = apiKey.trim())
             }
 
             AIHost.OPENAI -> {
-                OpenAI(token = apiKey)
+                OpenAI(token = apiKey.trim())
             }
 
             AIHost.CUSTOM_OPENAI -> {
-                val baseUrl = customBaseUrl ?: "https://api.openai.com/v1/"
+                val baseUrl = (customBaseUrl ?: "https://api.openai.com/v1/").trim()
+                require(baseUrl.isNotEmpty()) { "Please set the custom AI provider's base URL." }
+                val normalizedBaseUrl =
+                    URLBuilder(baseUrl).apply {
+                        // The SDK appends chat/completions. Without a trailing slash, Ktor
+                        // replaces the final path segment (for example, /v1).
+                        encodedPath = encodedPath.trimEnd('/').removeSuffix("/chat/completions") + "/"
+                    }.buildString()
                 val config =
                     OpenAIConfig(
-                        token = apiKey,
-                        host = OpenAIHost(baseUrl = baseUrl),
+                        token = apiKey.trim(),
+                        // Reasoning models may take longer than the SDK's 30-second default.
+                        timeout = Timeout(socket = 2.minutes),
+                        host = OpenAIHost(baseUrl = normalizedBaseUrl),
                         headers = customHeaders ?: emptyMap(),
                     )
                 OpenAI(config)
@@ -58,8 +71,9 @@ class AiService(
     }
 
     private val model by lazy {
-        if (!customModelId.isNullOrEmpty()) {
-            ModelId(customModelId)
+        val modelId = customModelId?.trim()
+        if (!modelId.isNullOrEmpty()) {
+            ModelId(modelId)
         } else {
             when (aiHost) {
                 AIHost.GEMINI -> ModelId("gemini-2.0-flash")
@@ -93,7 +107,13 @@ class AiService(
         val request =
             chatCompletionRequest {
                 this.model = this@AiService.model
-                responseFormat = if (aiHost == AIHost.CUSTOM_OPENAI) ChatResponseFormat.JsonObject else ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
+                responseFormat =
+                    if (aiHost == AIHost.CUSTOM_OPENAI) {
+                        // DeepSeek and other compatible providers do not accept json_schema.
+                        ChatResponseFormat.JsonObject
+                    } else {
+                        ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
+                    }
                 messages {
                     system {
                         content =
@@ -107,15 +127,12 @@ class AiService(
                             "- When translating: keep ALL keys exactly the same, output MUST have the EXACT same number of entries as the input, do NOT merge/split/add/remove any entries, and preserve the song's meaning, tone, and emotion.\n" +
                             "\n" +
                             "OUTPUT:\n" +
-                            "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language)."
+                            "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language).\n" +
+                            "- Example: {\"translations\":{\"0\":\"translated line\"}}"
                     }
                     user {
-                        content {
-                            text("Target language: $targetLanguage")
-                        }
-                        content {
-                            text("Input lyrics: $inputJson")
-                        }
+                        // Text-only providers need a string, not multimodal content parts.
+                        content = "Target language: $targetLanguage\nInput lyrics: $inputJson"
                     }
                 }
             }
@@ -139,6 +156,9 @@ class AiService(
             throw IllegalStateException(
                 "Input lyrics are already in the target language ($targetLanguage). Translation aborted.",
             )
+        }
+        if (translatedMap.keys != indexToWords.keys || translatedMap.values.any { it.isBlank() }) {
+            throw IllegalStateException("AI returned incomplete lyrics translations. Please try again.")
         }
 
         // Map translated text back to original lines, preserving all timestamps
