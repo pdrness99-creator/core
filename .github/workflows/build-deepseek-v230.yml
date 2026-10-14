@@ -1,0 +1,84 @@
+name: Build SimpMusic 2.3.0 with DeepSeek fix
+
+on:
+  push:
+    branches: [build/deepseek-v230]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact SimpMusic 2.3.0 source
+        uses: actions/checkout@v4
+        with:
+          repository: maxrave-dev/SimpMusic
+          ref: f037043d714450bac5aaac2f9dbf77e17b019303
+          path: app
+          persist-credentials: false
+
+      - name: Checkout repaired matching core
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: app/core
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: microsoft
+          cache: gradle
+          cache-dependency-path: app/gradle/libs.versions.toml
+
+      - name: Run translation regression tests
+        working-directory: app
+        run: |
+          chmod +x gradlew
+          ./gradlew :aiService:jvmTest -PisFullBuild=false --no-daemon --no-configuration-cache --max-workers=2
+
+      - name: Build FOSS debug APK
+        working-directory: app
+        run: ./gradlew :androidApp:assembleDebug -PisFullBuild=false --no-daemon --no-configuration-cache --max-workers=2
+
+      - name: Verify APK and record source revisions
+        working-directory: app
+        env:
+          CORE_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p ../delivery
+          apk=$(find androidApp/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)
+          test -n "$apk"
+          tools_dir=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          "$tools_dir/apksigner" verify --verbose --print-certs "$apk" > ../delivery/apk-signature.txt
+          "$tools_dir/aapt" dump badging "$apk" > ../delivery/apk-metadata.txt
+          cp "$apk" ../delivery/SimpMusic-2.3.0-DeepSeek-debug.apk
+          echo "SimpMusic: $(git rev-parse HEAD)" > ../delivery/source-revisions.txt
+          echo "Core: $CORE_REVISION" >> ../delivery/source-revisions.txt
+          echo 'Variant: FOSS debug; application ID com.maxrave.simpmusic.dev' >> ../delivery/source-revisions.txt
+          cd ../delivery
+          sha256sum SimpMusic-2.3.0-DeepSeek-debug.apk > SHA256SUMS.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimpMusic-2.3.0-DeepSeek-debug
+          path: delivery/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: translation-test-reports
+          path: |
+            app/core/service/aiService/build/reports/tests/
+            app/core/service/aiService/build/test-results/
+          if-no-files-found: ignore
