@@ -96,9 +96,10 @@ class AiTranslationTest {
             FakeProvider("""{"translations":{"1":"晨光","3":"照亮归途"}}""").use { provider ->
                 val original = lyrics("", "Morning light", "♫", "Lights the way home", " ")
                 val result = provider.client().translateLyrics(original, "zh").getOrThrow()
-                assertEquals(listOf("", "晨光", "♫", "照亮归途", " "), result.lines!!.map { it.words })
+                val translatedLines = assertNotNull(result.lines)
+                assertEquals(listOf("", "晨光", "♫", "照亮归途", " "), translatedLines.map { it.words })
                 assertEquals(original.syncType, result.syncType)
-                original.lines!!.zip(result.lines).forEach { (before, after) ->
+                assertNotNull(original.lines).zip(translatedLines).forEach { (before, after) ->
                     assertEquals(before.startTimeMs, after.startTimeMs)
                     assertEquals(before.endTimeMs, after.endTimeMs)
                 }
@@ -131,9 +132,10 @@ class AiTranslationTest {
             FakeProvider("""{"translations":{"0":"晨光","2":"归途"}}""").use { provider ->
                 val original = lyrics("Morning light", "♫", "Way home")
                 val result = provider.client().translateLyrics(original, "zh").getOrThrow()
-                assertEquals(original.lines!![1], result.lines!![1])
-                assertEquals(null, result.lines[0].syllables)
-                assertEquals(null, result.lines[2].syllables)
+                val translatedLines = assertNotNull(result.lines)
+                assertEquals(assertNotNull(original.lines)[1], translatedLines[1])
+                assertEquals(null, translatedLines[0].syllables)
+                assertEquals(null, translatedLines[2].syllables)
             }
         }
 
