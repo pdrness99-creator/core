@@ -1,6 +1,7 @@
 package org.simpmusic.aiservice
 
 import com.aallam.openai.api.chat.ChatCompletion
+import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatResponseFormat
 import com.aallam.openai.api.chat.JsonSchema
 import com.aallam.openai.api.chat.chatCompletionRequest
@@ -69,6 +70,44 @@ class AiService(
         }
     }
 
+    internal fun createTranslationRequest(
+        inputJson: String,
+        targetLanguage: String,
+    ): ChatCompletionRequest =
+        chatCompletionRequest {
+            this.model = this@AiService.model
+            responseFormat =
+                when (aiHost) {
+                    AIHost.CUSTOM_OPENAI -> ChatResponseFormat.JsonObject
+                    AIHost.OPENAI, AIHost.GEMINI ->
+                        ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
+                }
+            messages {
+                system {
+                    content =
+                        "You are a song lyrics translation assistant.\n" +
+                        "\n" +
+                        "TASK:\n" +
+                        "- You will receive a JSON object where keys are line indices and values are lyrics text.\n" +
+                        "- FIRST, detect the dominant language of the input lyrics.\n" +
+                        "- If the detected language is the SAME as the target language code, return an EMPTY \"translations\" object. Do NOT translate. Do NOT paraphrase.\n" +
+                        "- Otherwise, translate ONLY the values to the target language.\n" +
+                        "- When translating: keep ALL keys exactly the same, output MUST have the EXACT same number of entries as the input, do NOT merge/split/add/remove any entries, and preserve the song's meaning, tone, and emotion.\n" +
+                        "\n" +
+                        "OUTPUT:\n" +
+                        "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language)."
+                }
+                user {
+                    content {
+                        text("Target language: $targetLanguage")
+                    }
+                    content {
+                        text("Input lyrics: $inputJson")
+                    }
+                }
+            }
+        }
+
     suspend fun translateLyrics(
         inputLyrics: Lyrics,
         targetLanguage: String,
@@ -90,35 +129,7 @@ class AiService(
 
         val inputJson = json.encodeToString(MapSerializer(String.serializer(), String.serializer()), indexToWords)
 
-        val request =
-            chatCompletionRequest {
-                this.model = this@AiService.model
-                responseFormat = if (aiHost == AIHost.CUSTOM_OPENAI) ChatResponseFormat.JsonObject else ChatResponseFormat.jsonSchema(aiResponseJsonSchema)
-                messages {
-                    system {
-                        content =
-                            "You are a song lyrics translation assistant.\n" +
-                            "\n" +
-                            "TASK:\n" +
-                            "- You will receive a JSON object where keys are line indices and values are lyrics text.\n" +
-                            "- FIRST, detect the dominant language of the input lyrics.\n" +
-                            "- If the detected language is the SAME as the target language code, return an EMPTY \"translations\" object. Do NOT translate. Do NOT paraphrase.\n" +
-                            "- Otherwise, translate ONLY the values to the target language.\n" +
-                            "- When translating: keep ALL keys exactly the same, output MUST have the EXACT same number of entries as the input, do NOT merge/split/add/remove any entries, and preserve the song's meaning, tone, and emotion.\n" +
-                            "\n" +
-                            "OUTPUT:\n" +
-                            "- A JSON object with the \"translations\" field containing the same keys mapped to translated values (or an empty object when the input is already in the target language)."
-                    }
-                    user {
-                        content {
-                            text("Target language: $targetLanguage")
-                        }
-                        content {
-                            text("Input lyrics: $inputJson")
-                        }
-                    }
-                }
-            }
+        val request = createTranslationRequest(inputJson, targetLanguage)
         val completion: ChatCompletion = openAI.chatCompletion(request)
         val jsonContent =
             completion.choices
